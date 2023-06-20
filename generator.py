@@ -29,6 +29,8 @@ class Generator:
         self.rng = default_rng(seed)
         self.curr_params = None
 
+        self.pretraining = False
+
         # for real data, use HapMap
         if mirror_real and reco_folder != None:
             files = global_vars.get_reco_files(reco_folder)
@@ -49,7 +51,7 @@ class Generator:
                 global_vars.NUM_SNPS, 2), dtype=np.float32) # two channels
 
         # set up parameters
-        sim_params = param_set.ParamSet(self.simulator)
+        sim_params = param_set.ParamSet()
         if real:
             pass # keep orig for "fake" real
         elif params == []:
@@ -84,11 +86,10 @@ class Generator:
         if self.prior == []:
             return params.reco.value
 
-        return draw_background_rate_from_prior(self.prior, self.weights,
-            self.rng)
+        return draw_background_rate_from_prior(self.prior, self.weights)
 
-def draw_background_rate_from_prior(prior_rates, prob, rng):
-    return rng.choice(prior_rates, p=prob)
+def draw_background_rate_from_prior(prior_rates, prob):
+    return np.random.choice(prior_rates, p=prob)
 
 def prep_region(ts, neg1, region_len):
     """Gets simulated data ready"""
@@ -108,12 +109,12 @@ def prep_region(ts, neg1, region_len):
 if __name__ == "__main__":
 
     batch_size = 50
-    params = param_set.ParamSet(simulation.exp)
+    params = param_set.ParamSet()
 
     # quick test
     print("sim exp")
-    generator = Generator(simulation.exp, ["N1", "T1"], [20],
+    generator = Generator(simulation.simulate_exp, ["N1", "T1"], [20],
                           global_vars.DEFAULT_SEED)
     generator.update_params([params.N1.value, params.T1.value])
-    mini_batch = generator.simulate_batch(batch_size=batch_size)
-    print("x", mini_batch[0,:,:,0], mini_batch.shape)
+    mini_batch = generator.simulate_batch()
+    print("x", mini_batch.shape)

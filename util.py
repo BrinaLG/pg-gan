@@ -16,11 +16,11 @@ import param_set
 import real_data_random
 import simulation
 
-def parse_params(param_input, simulator):
+def parse_params(param_input, all_params):
     """See which params were desired for inference"""
     param_strs = param_input.split(',')
     parameters = []
-    for _, p in vars(param_set.ParamSet(simulator)).items():
+    for _, p in vars(param_set.ParamSet()).items():
         if p.name in param_strs:
             parameters.append(p)
 
@@ -131,7 +131,7 @@ def parse_args(in_file_data = None, param_values = None):
     """Parse command line arguments."""
     parser = optparse.OptionParser(description='PG-GAN entry point')
 
-    parser.add_option('-m', '--model', type='string',help='exp, im, ooa2, ooa3')
+    parser.add_option('-m', '--model', type='string',help='admix, exp, im, ooa2, ooa3')
     parser.add_option('-p', '--params', type='string',
         help='comma separated parameter list')
     parser.add_option('-d', '--data_h5', type='string', help='real data file')
@@ -142,8 +142,8 @@ def parse_args(in_file_data = None, param_values = None):
     parser.add_option('-t', action="store_true", dest="toy", help='toy example')
     parser.add_option('-s', '--seed', type='int', default=1833,
         help='seed for RNG')
-    parser.add_option('-n', '--sample_sizes', type='string',
-        help='comma separated sample sizes for each population, in haps')
+    parser.add_option('-n', '--sample_size', type='int',
+        help='total sample size (assumes equal pop sizes)')
     parser.add_option('-v', '--param_values', type='string',
         help='comma separated values corresponding to params')
 
@@ -182,22 +182,12 @@ def parse_args(in_file_data = None, param_values = None):
         elif opts.bed != in_file_data['bed_file']:
             param_mismatch("BED FILE", in_file_data['bed_file'], opts.bed)
 
-        if opts.sample_sizes is None:
-            opts.sample_sizes = in_file_data['sample_sizes']
-        elif opts.sample_sizes != in_file_data['sample_sizes']:
-            param_mismatch("SAMPLE_SIZES", in_file_data['sample_sizes'],
-                opts.sample_sizes)
-
         if opts.reco_folder is None:
             opts.reco_folder = in_file_data['reco_folder']
         elif opts.reco_folder != in_file_data['reco_folder']:
             param_mismatch("RECO_FOLDER", in_file_data['reco_folder'],
                 opts.reco_folder)
 
-        # because we care about the seed from the trial, here in_file_data takes over opts
-        if in_file_data['seed'] is not None:
-            opts.seed = in_file_data['seed']
-            
     if opts.param_values is not None:
         arg_values = [float(val_str) for val_str in
             opts.param_values.split(',')]
@@ -205,7 +195,7 @@ def parse_args(in_file_data = None, param_values = None):
             param_mismatch("PARAM_VALUES", param_values, arg_values)
             param_values = arg_values # override at return
 
-    mandatories = ['model','params','sample_sizes']
+    mandatories = ['model','params']
     for m in mandatories:
         if not opts.__dict__[m]:
             print('mandatory option ' + m + ' is missing\n')
@@ -275,12 +265,16 @@ def read_demo_file(filename, Ne):
                 * 4 * Ne, initial_size=float(pop) * Ne))
     return demos
 
-def parse_sample_sizes(n_string):
-    """ n_string is e.g. "12,6,8" """
-    return [int(n) for n in n_string.split(",")]
-
 def process_opts(opts, summary_stats = False):
-    sample_sizes = parse_sample_sizes(opts.sample_sizes)
+
+    if 'reco' in opts.params and opts.reco_folder is not None:
+        print('Recombination rate cannot be inferred and read from files. Please select one and try again. Exiting.')
+        sys.exit()
+
+    # parameter defaults
+    all_params = param_set.ParamSet()
+    parameters = parse_params(opts.params, all_params) # desired params
+    param_names = [p.name for p in parameters]
 
     real = False
     # if real data provided
@@ -294,30 +288,71 @@ def process_opts(opts, summary_stats = False):
         #         globals.FRAC_TEST)
         # else:
         # most typical case for real data
-        iterator = real_data_random.RealDataRandomIterator(filename=opts.data_h5,
-                                                           seed=opts.seed,
-                                                           bed_file=opts.bed)
+        iterator = real_data_random.RealDataRandomIterator(opts.data_h5,
+            opts.bed)
 
-    # more flexible way to get the simulator
-    simulator = getattr(simulation, opts.model)
+    # parse model and simulator
+    if opts.model == 'const':
+        num_pops = 1
+        simulator = simulation.simulate_const
+
+    # exp growth
+    elif opts.model == 'exp':
+        num_pops = 1
+        simulator = simulation.simulate_exp
+        
+     # admix population
+    elif opts.model == 'admix':
+        num_pops = 4
+        simulator = simulation.simulate_admix       
+
+    # isolation-with-migration model (2 populations)
+    elif opts.model == 'im':
+        num_pops = 2
+        simulator = simulation.simulate_im
+
+    # out-of-Africa model (2 populations)
+    elif opts.model in ['ooa2', 'fsc']:
+        num_pops = 2
+        simulator = simulation.simulate_ooa2
+
+    # MSMC
+    # elif opts.model == 'msmc':
+    #     print("\nALERT you are running MSMC sim!\n")
+    #     sample_sizes = get_sample_sizes(sample_size_total, 2)
+    #     simulator = simulate_py_from_MSMC_IM.simulate_msmc
+
+    # CEU/CHB (2 populations)
+    elif opts.model == 'post_ooa':
+        num_pops = 2
+        simulator = simulation.simulate_postOOA
+
+    # out-of-Africa model (3 populations)
+    elif opts.model == 'ooa3':
+        num_pops = 3
+        simulator = simulation.simulate_ooa3
+
+    # no other options
+    else:
+        sys.exit(opts.model + " is not recognized")
 
     if (global_vars.FILTER_SIMULATED or global_vars.FILTER_REAL_DATA):
         print("FILTERING SINGLETONS")
 
-    # parameter defaults
-    parameters = parse_params(opts.params, simulator) # desired params
-    param_names = [p.name for p in parameters]
-
     # generator
+    sample_size_total = global_vars.DEFAULT_SAMPLE_SIZE if opts.sample_size is \
+        None else opts.sample_size
+    sample_sizes = [sample_size_total//num_pops for i in range(num_pops)]
+
     gen = generator.Generator(simulator, param_names, sample_sizes,
         opts.seed, mirror_real=real, reco_folder=opts.reco_folder)
 
-    if opts.data_h5 is None:
+    if opts.data_h5 == None:
         # "real data" is simulated with fixed params
         iterator = generator.Generator(simulator, param_names, sample_sizes,
             opts.seed) # don't need reco_folder
 
-    return gen, iterator, parameters, sample_sizes # last used for disc.
+    return gen, iterator, parameters, sample_sizes
 
 if __name__ == "__main__":
     # test major/minor and post-processing

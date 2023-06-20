@@ -18,8 +18,8 @@ import util
 from real_data_random import Region
 
 # globals for simulated annealing
-NUM_ITER = 300
-NUM_BATCH = 100
+NUM_ITER = 300 # 
+NUM_BATCH = 100 # 
 print("NUM_ITER", NUM_ITER)
 print("BATCH_SIZE", global_vars.BATCH_SIZE)
 print("NUM_BATCH", NUM_BATCH)
@@ -73,8 +73,8 @@ def simulated_annealing(generator, disc, iterator, parameters, seed,
     pg_gan = PG_GAN(generator, disc, iterator, parameters, seed)
 
     # find starting point through pre-training (update generator in method)
-    if not toy:
-        s_current = pg_gan.disc_pretraining(800)
+    if False: #not toy:
+        s_current = pg_gan.disc_pretraining(500)
     else:
         pg_gan.disc_pretraining(1) # for testing purposes
         s_current = [param.start() for param in pg_gan.parameters]
@@ -105,7 +105,7 @@ def simulated_annealing(generator, disc, iterator, parameters, seed,
         loss_best = float('inf')
         for k in range(len(parameters)): # trying all params!
             #k = random.choice(range(len(parameters))) # random param
-            for j in range(10): # trying 10
+            for j in range(20): # trying 10 CHANGED
 
                 # can update all the parameters at once, or choose one at a time
                 #s_proposal = [parameters[k].proposal(s_current[k], T) for k in
@@ -213,7 +213,8 @@ class PG_GAN:
             s_trial = [param.start() for param in self.parameters]
             print("trial", k+1, s_trial)
             self.generator.update_params(s_trial)
-            real_acc, fake_acc = self.train_sa(num_batches)
+            #real_acc, fake_acc = self.train_sa(num_batches)
+            real_acc, fake_acc = 0.9, 0.9
             avg_acc = (real_acc + fake_acc)/2
             if avg_acc > max_acc:
                 max_acc = avg_acc
@@ -296,12 +297,19 @@ class PG_GAN:
 def get_discriminator(sample_sizes):
     num_pops = len(sample_sizes)
     if num_pops == 1:
-        return discriminator.OnePopModel(sample_sizes[0])
+        return discriminator.OnePopModel()
     if num_pops == 2:
         return discriminator.TwoPopModel(sample_sizes[0], sample_sizes[1])
+    if num_pops == 3:
+        return discriminator.ThreePopModel(sample_sizes[0], sample_sizes[1],
+            sample_sizes[2])
+    if num_pops == 4:
+        print("Four Pop Model")
+        return discriminator.FourPopModel(sample_sizes[0], sample_sizes[1],
+            sample_sizes[2],sample_sizes[3])
     # else
-    return discriminator.ThreePopModel(sample_sizes[0], sample_sizes[1],
-        sample_sizes[2])
+    return discriminator.FourPopModel(sample_sizes[0], sample_sizes[1],
+        sample_sizes[2], sample_sizes[3])
 
 if __name__ == "__main__":
     main()

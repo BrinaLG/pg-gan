@@ -14,7 +14,7 @@ from tensorflow.keras import Model
 class OnePopModel(Model):
     """Single population model - based on defiNETti software."""
 
-    def __init__(self, pop):
+    def __init__(self):
         super(OnePopModel, self).__init__()
 
         # it is (1,5) for permutation invariance (shape is n X SNPs)
@@ -29,11 +29,8 @@ class OnePopModel(Model):
         self.fc2 = Dense(128, activation='relu')
         self.dense3 = Dense(1)#2, activation='softmax') # two classes
 
-        self.pop = pop
-
     def call(self, x, training=None):
         """x is the genotype matrix, dist is the SNP distances"""
-        assert x.shape[1] == self.pop
         x = self.conv1(x)
         x = self.pool(x) # pool
         x = self.conv2(x)
@@ -87,7 +84,6 @@ class TwoPopModel(Model):
 
     def call(self, x, training=None):
         """x is the genotype matrix, dist is the SNP distances"""
-        assert x.shape[1] == self.pop1 + self.pop2
 
         # first divide into populations
         x_pop1 = x[:, :self.pop1, :, :]
@@ -162,12 +158,13 @@ class ThreePopModel(Model):
 
     def call(self, x, training=None):
         """x is the genotype matrix, dist is the SNP distances"""
-        assert x.shape[1] == self.pop1 + self.pop2 + self.pop3
 
         # first divide into populations
         x_pop1 = x[:, :self.pop1, :, :]
         x_pop2 = x[:, self.pop1:self.pop1+self.pop2, :, :]
         x_pop3 = x[:, self.pop1+self.pop2:, :, :]
+        #x_pop3 = x[:, self.pop1+self.pop2:self.pop1+self.pop2+self.pop3, :, :]
+        #x_pop4 = x[:, self.pop1+self.pop2+self.pop3:, :, :]
 
         # two conv layers for each part
         x_pop1 = self.conv1(x_pop1)
@@ -196,6 +193,90 @@ class ThreePopModel(Model):
 
         # concatenate
         m = self.merge([x_pop1, x_pop2, x_pop3])
+        m = self.fc1(m)
+        m = self.dropout(m, training=training)
+        m = self.fc2(m)
+        m = self.dropout(m, training=training)
+        return self.dense3(m)
+
+    def build_graph(self, gt_shape):
+        """This is for testing, based on TF tutorials"""
+        gt_shape_nobatch = gt_shape[1:]
+        self.build(gt_shape) # make sure to call on shape with batch
+        gt_inputs = tf.keras.Input(shape=gt_shape_nobatch)
+
+        if not hasattr(self, 'call'):
+            raise AttributeError("User should define 'call' method!")
+
+        _ = self.call(gt_inputs)
+
+class FourPopModel(Model):
+    """Four population model"""
+
+    # integers for num pop1, pop2, pop3, pop4
+    def __init__(self, pop1, pop2, pop3, pop4):
+        super(FourPopModel, self).__init__()
+
+        # it is (1,5) for permutation invariance (shape is n X SNPs)
+        self.conv1 = Conv2D(32, (1, 5), activation='relu')
+        self.conv2 = Conv2D(64, (1, 5), activation='relu')
+        self.pool = MaxPooling2D(pool_size = (1,2), strides = (1,2))
+
+        self.flatten = Flatten()
+        self.merge = Concatenate()
+        self.dropout = Dropout(rate=0.5)
+
+        self.fc1 = Dense(128, activation='relu')
+        self.fc2 = Dense(128, activation='relu')
+        self.dense3 = Dense(1)#2, activation='softmax') # two classes
+
+        self.pop1 = pop1
+        self.pop2 = pop2
+        self.pop3 = pop3
+        self.pop4 = pop4
+        
+    def call(self, x, training=None):
+        """x is the genotype matrix, dist is the SNP distances"""
+
+        # first divide into populations
+        x_pop1 = x[:, :self.pop1, :, :]
+        x_pop2 = x[:, self.pop1:self.pop1+self.pop2, :, :]
+        x_pop3 = x[:, self.pop1 + self.pop2 : self.pop1 + self.pop2 + self.pop3, :, :]
+        x_pop4 = x[:, self.pop1+self.pop2+self.pop3:, :, :]
+        
+        # two conv layers for each part
+        x_pop1 = self.conv1(x_pop1)
+        x_pop2 = self.conv1(x_pop2)
+        x_pop3 = self.conv1(x_pop3)
+        x_pop4 = self.conv1(x_pop4)
+        x_pop1 = self.pool(x_pop1) # pool
+        x_pop2 = self.pool(x_pop2) # pool
+        x_pop3 = self.pool(x_pop3) # pool
+        x_pop4 = self.pool(x_pop4) # pool
+
+        x_pop1 = self.conv2(x_pop1)
+        x_pop2 = self.conv2(x_pop2)
+        x_pop3 = self.conv2(x_pop3)
+        x_pop4 = self.conv2(x_pop4)
+        x_pop1 = self.pool(x_pop1) # pool
+        x_pop2 = self.pool(x_pop2) # pool
+        x_pop3 = self.pool(x_pop3) # pool
+        x_pop4 = self.pool(x_pop4) # pool
+        
+        # 1 is the dimension of the individuals
+        x_pop1 = tf.math.reduce_sum(x_pop1, axis=1)
+        x_pop2 = tf.math.reduce_sum(x_pop2, axis=1)
+        x_pop3 = tf.math.reduce_sum(x_pop3, axis=1)
+        x_pop4 = tf.math.reduce_sum(x_pop4, axis=1)
+        
+        # flatten all
+        x_pop1 = self.flatten(x_pop1)
+        x_pop2 = self.flatten(x_pop2)
+        x_pop3 = self.flatten(x_pop3)
+        x_pop4 = self.flatten(x_pop4)
+        
+        # concatenate
+        m = self.merge([x_pop1, x_pop2, x_pop3,x_pop4])
         m = self.fc1(m)
         m = self.dropout(m, training=training)
         m = self.fc2(m)

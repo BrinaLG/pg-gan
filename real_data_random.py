@@ -9,7 +9,7 @@ Date: 9/27/22
 from collections import defaultdict
 import h5py
 import numpy as np
-from numpy.random import default_rng
+import random
 import sys
 import datetime
 
@@ -20,10 +20,10 @@ import util
 class Region:
 
     def __init__(self, chrom, start_pos, end_pos):
-        self.chrom = str(chrom)
-        self.start_pos = int(start_pos)
-        self.end_pos = int(end_pos)
-        self.region_len = self.end_pos - self.start_pos # L
+        self.chrom = chrom
+        self.start_pos = start_pos
+        self.end_pos = end_pos
+        self.region_len = end_pos - start_pos # L
 
     def __str__(self):
         s = str(self.chrom) + ":" + str(self.start_pos) + "-" +str(self.end_pos)
@@ -68,7 +68,7 @@ class Region:
         # add on last if inside
         if end_inside:
             part_inside += (self.end_pos - mask_lst[region_end_idx][0])
-        elif self.end_pos <= mask_lst[region_end_idx][0]:
+        elif self.end_pos <= mask_lst[region_start_idx][0]:
             # end before closest region, don't add anything
             pass
         else:
@@ -116,7 +116,7 @@ def binary_search(q, lst):
 
 class RealDataRandomIterator:
 
-    def __init__(self, filename, seed, bed_file=None, chrom_starts=False):
+    def __init__(self, filename, bed_file=None, chrom_starts=False):
         callset = h5py.File(filename, mode='r')
         print(list(callset.keys()))
         # output: ['GT'] ['CHROM', 'POS']
@@ -140,8 +140,6 @@ class RealDataRandomIterator:
 
         # mask
         self.mask_dict = read_mask(bed_file) if bed_file is not None else None
-
-        self.rng = default_rng(seed)
 
         # useful for fastsimcoal and msmc
         if chrom_starts:
@@ -177,7 +175,7 @@ class RealDataRandomIterator:
 
     def real_region(self, neg1, region_len):
         # inclusive
-        start_idx = self.rng.integers(0, self.num_snps - global_vars.NUM_SNPS)
+        start_idx = random.randrange(self.num_snps - global_vars.NUM_SNPS)
 
         if region_len:
             end_idx = self.find_end(start_idx)
@@ -252,15 +250,14 @@ class RealDataRandomIterator:
         assert len(hap_data) == len(positions)
 
         return hap_data.transpose(), positions
-
+    
 if __name__ == "__main__":
     # testing
 
     # test file
     filename = sys.argv[1]
     bed_file = sys.argv[2]
-    iterator = RealDataRandomIterator(filename, global_vars.DEFAULT_SEED,
-        bed_file)
+    iterator = RealDataRandomIterator(filename, bed_file)
 
     start_time = datetime.datetime.now()
     for i in range(100):
@@ -272,6 +269,5 @@ if __name__ == "__main__":
 
     # test find_end
     for i in range(10):
-        start_idx = iterator.rng.integers(0, iterator.num_snps - \
-            global_vars.NUM_SNPS)
+        start_idx = random.randrange(iterator.num_snps-global_vars.NUM_SNPS)
         iterator.find_end(start_idx)

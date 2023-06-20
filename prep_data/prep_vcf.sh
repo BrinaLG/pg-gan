@@ -1,6 +1,17 @@
 #!/bin/bash
 
-SUFFIX=.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz
+module load bcftools
+
+# From github
+#SUFFIX=.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz
+
+# for new Release
+SUFFIX=.phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz
+
+INPUT_CHR = /Users/blopezgf/Documents/Research/Project1/Data/1kG_20130502/
+#INPUT_INDFILE = /Users/blopezgf/Documents/Research/Project1/Code/pg-gan/prep_data/IND_list/
+
+CURR_dir = ${pwd}
 
 # for each set of population(s)
 for POP in CHB
