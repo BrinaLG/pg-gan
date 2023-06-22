@@ -42,7 +42,6 @@ class Generator:
 
     def simulate_batch(self, batch_size=global_vars.BATCH_SIZE, params=[],
         region_len=False, real=False, neg1=True):
-
         # initialize 4D matrix (two channels for distances)
         if region_len:
             regions = []

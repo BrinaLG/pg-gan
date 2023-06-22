@@ -73,7 +73,7 @@ def simulated_annealing(generator, disc, iterator, parameters, seed,
     pg_gan = PG_GAN(generator, disc, iterator, parameters, seed)
 
     # find starting point through pre-training (update generator in method)
-    if False: #not toy:
+    if not toy:
         s_current = pg_gan.disc_pretraining(500)
     else:
         pg_gan.disc_pretraining(1) # for testing purposes
@@ -105,7 +105,7 @@ def simulated_annealing(generator, disc, iterator, parameters, seed,
         loss_best = float('inf')
         for k in range(len(parameters)): # trying all params!
             #k = random.choice(range(len(parameters))) # random param
-            for j in range(20): # trying 10 CHANGED
+            for j in range(10):
 
                 # can update all the parameters at once, or choose one at a time
                 #s_proposal = [parameters[k].proposal(s_current[k], T) for k in
@@ -141,7 +141,15 @@ def simulated_annealing(generator, disc, iterator, parameters, seed,
             print("NOT ACCEPTED")
 
         print("T, p_accept, rand, s_current, loss_curr", end=" ")
-        print(T, p_accept, rand, s_current, loss_curr)
+        s_output = []
+        for s in s_current:
+            if isinstance(s, list):
+                out = s + [1 - (s[0] + s[1])]
+            else:
+                out = s
+            s_output.append(out)
+
+        print(T, p_accept, rand, s_output, loss_curr)
         posterior.append(s_current)
         loss_lst.append(loss_curr)
 
@@ -150,34 +158,6 @@ def simulated_annealing(generator, disc, iterator, parameters, seed,
 def temperature(i, num_iter):
     """Temperature controls the width of the proposal and acceptance prob."""
     return 1 - i/num_iter # start at 1, end at 0
-
-# not used right now
-"""
-def grid_search(model_type, samples, demo_file, simulator, iterator, parameters,
-    is_range, seed):
-
-    # can only do one param right now
-    assert len(parameters) == 1
-    param = parameters[0]
-
-    all_values = []
-    all_likelihood = []
-    for fake_value in np.linspace(param.min, param.max, num=30):
-        fake_params = [fake_value]
-        model = TrainingModel(model_type, samples, demo_file, simulator,
-            iterator, parameters, is_range, seed)
-
-        # train more for grid search
-        model.train(fake_params, NUM_BATCH*10, globals.BATCH_SIZE)
-        test_acc, conf_mat = model.test(fake_params, NUM_TEST)
-        like_curr = likelihood(test_acc)
-        print("params, test_acc, likelihood", fake_value, test_acc, like_curr)
-
-        all_values.append(fake_value)
-        all_likelihood.append(like_curr)
-
-    return all_values, all_likelihood
-"""
 
 ################################################################################
 # TRAINING
@@ -213,8 +193,7 @@ class PG_GAN:
             s_trial = [param.start() for param in self.parameters]
             print("trial", k+1, s_trial)
             self.generator.update_params(s_trial)
-            #real_acc, fake_acc = self.train_sa(num_batches)
-            real_acc, fake_acc = 0.9, 0.9
+            real_acc, fake_acc = self.train_sa(num_batches)
             avg_acc = (real_acc + fake_acc)/2
             if avg_acc > max_acc:
                 max_acc = avg_acc
@@ -304,7 +283,6 @@ def get_discriminator(sample_sizes):
         return discriminator.ThreePopModel(sample_sizes[0], sample_sizes[1],
             sample_sizes[2])
     if num_pops == 4:
-        print("Four Pop Model")
         return discriminator.FourPopModel(sample_sizes[0], sample_sizes[1],
             sample_sizes[2],sample_sizes[3])
     # else

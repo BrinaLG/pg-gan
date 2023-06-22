@@ -29,10 +29,16 @@ class Parameter:
         return s
 
     def start(self):
+        if isinstance(self.value, list):
+            main_value = np.random.uniform(self.min, self.max)
+            scnd_value = np.random.uniform(self.min, 1 - main_value)
+            return [main_value, scnd_value]
         # random initialization
         return np.random.uniform(self.min, self.max)
 
     def start_range(self):
+        if self.name == 'propJOINT':
+            raise IOError
         start_min = np.random.uniform(self.min, self.max)
         start_max = np.random.uniform(self.min, self.max)
         if start_min <= start_max:
@@ -40,6 +46,12 @@ class Parameter:
         return self.start_range()
 
     def fit_to_range(self, value):
+        if isinstance(value, list):
+            new_list = []
+            new_list.append(max(min(value[0], self.max), self.min))
+            new_list.append(max(min(value[1], 1 - new_list[0]), self.min))
+            return new_list
+        
         value = min(value, self.max)
         return max(value, self.min)
 
@@ -47,17 +59,26 @@ class Parameter:
         if multiplier <= 0: # last iter
             return curr_value
 
+        if isinstance(curr_value, list):
+            new_val = norm(curr_value[0], self.proposal_width * multiplier).rvs()
+            new_comp = norm(curr_value[1], self.proposal_width * multiplier).rvs()
+            new_value = [new_val, new_comp]
         # normal around current value (make sure we don't go outside bounds)
-        new_value = norm(curr_value, self.proposal_width*multiplier).rvs()
+        else:
+            new_value = norm(curr_value, self.proposal_width * multiplier).rvs()
         new_value = self.fit_to_range(new_value)
         # if the parameter hits the min or max it tends to get stuck
-        if new_value == curr_value or new_value == self.min or new_value == \
-            self.max:
+        if new_value == curr_value or new_value == self.min or new_value == self.max:
             return self.proposal(curr_value, multiplier) # recurse
+        elif isinstance(new_value, list) and (new_value[0] == self.min or new_value[0] == self.max):
+            return self.proposal(curr_value, multiplier)
         else:
             return new_value
 
     def proposal_range(self, curr_lst, multiplier):
+        if self.name == 'propJOINT':
+            raise IOError
+
         new_min = self.fit_to_range(norm(curr_lst[0], self.proposal_width *
             multiplier).rvs())
         new_max = self.fit_to_range(norm(curr_lst[1], self.proposal_width *
@@ -105,9 +126,7 @@ class ParamSet:
         self.mEUEA = Parameter(0, -0.0000078, 0.00002, "mEUEA")
         self.Tadmix = Parameter(12, 5, 30, "Tadmix") 
         
-        self.propEUR = Parameter(0.5, 0, 1, "propEUR") 
-        self.propAFR = Parameter(0.2, np.random.uniform(0,self.propEUR.value),self.propEUR.value,"propAFR")
-        self.propEAS = Parameter(0.3,0,1-self.propAFR.value-self.propEUR.value,"propEAS")
+        self.propJOINT = Parameter([0.2, 0.5], 0, 1, "propJOINT")
 	# older msprime version 
         self.radmix= Parameter(.05, -0.05, 0.08, "radmix") # growth rate of admixed population
 
